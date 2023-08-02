@@ -2,7 +2,12 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib
 
-class MyWindow(Gtk.Window):
+import asyncio
+import gbulb.gtk
+
+gbulb.install(gtk=True)
+
+class MyWindow(Gtk.Window, ):
     def __init__(self):
         super().__init__(title="Список товаров")
 
@@ -18,20 +23,34 @@ class MyWindow(Gtk.Window):
         self.box.pack_start(self.button2, True, True, 50)
 
     def on_button1_clicked(self, widget):
-        self.show_loading_spinner("Loading from API")
-        GLib.idle_add(self.do_api_loading)
+        dialog = self.show_loading_spinner("Loading from API")
+        asyncio.gather(self.do_api_loading(dialog))
+
 
     def on_button2_clicked(self, widget):
-        self.show_loading_spinner("Loading from file")
-        GLib.idle_add(self.do_file_loading)
+        dialog = self.show_loading_spinner("Loading from file")
+        asyncio.gather(self.do_file_loading(dialog))
+
+    async def do_api_loading(self, dialog):
+        print("Loading from API")
+        await asyncio.sleep(1)
+        print("slept")
+        dialog.destroy()
+
+    async def do_file_loading(self, dialog):
+        print("Loading from file")
+        await asyncio.sleep(1)
+        print("slept")
+        dialog.destroy()
 
     def show_loading_spinner(self, message):
         dialog = Gtk.Dialog(
             title=message,
             parent=self,
             flags=0,
-            buttons=(),
         )
+
+        dialog.set_default_size(300, 150)
 
         spinner = Gtk.Spinner()
         dialog.vbox.pack_start(spinner, True, True, 0)
@@ -40,37 +59,18 @@ class MyWindow(Gtk.Window):
         dialog.set_transient_for(self)
         dialog.set_modal(True)
 
-        def hide_dialog():
-            dialog.destroy()
-
         dialog.show()
         spinner.start()
 
-        GLib.idle_add(hide_dialog)
+        return dialog
 
-    def do_api_loading(self):
-        print("Loading from API")
-        # Здесь можно добавить код для загрузки данных из API
-        # ...
 
-        # Когда загрузка завершена, закрываем модальное окно:
-        self.hide_modal_dialog()
+if __name__ == "__main__":
+    asyncio.set_event_loop_policy(gbulb.gtk.GtkEventLoopPolicy())
+    window = MyWindow()
+    window.set_default_size(800, 600)
+    window.connect("destroy", lambda *args: loop.stop())
+    window.show_all()
 
-    def do_file_loading(self):
-        print("Loading from file")
-        # Здесь можно добавить код для загрузки данных из файла
-        # ...
-
-        # Когда загрузка завершена, закрываем модальное окно:
-        self.hide_modal_dialog()
-
-    def hide_modal_dialog(self):
-        for widget in self.get_children():
-            if isinstance(widget, Gtk.Dialog):
-                widget.destroy()
-
-win = MyWindow()
-win.set_default_size(800, 600)
-win.connect("destroy", Gtk.main_quit)
-win.show_all()
-Gtk.main()
+    loop = asyncio.get_event_loop()
+    loop.run_forever()
