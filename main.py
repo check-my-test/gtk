@@ -1,11 +1,9 @@
 import csv
-from functools import reduce
-
 import gi
 import httpx
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, GLib, Gdk
+from gi.repository import Gtk
 
 import asyncio
 import gbulb.gtk
@@ -23,6 +21,8 @@ class ListBoxRowWithData(Gtk.ListBoxRow):
 async def request_to_api(request_id, url):
     async with httpx.AsyncClient() as client:
         data = await client.get(url)
+        if data.status_code != 200:
+            data = {}
         return request_id, data.json()
 
 
@@ -42,7 +42,9 @@ class MyWindow(Gtk.Window):
         self.box.pack_start(self.button2, True, True, 50)
 
         self.scrolled_window = Gtk.ScrolledWindow()
-        self.scrolled_window.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.EXTERNAL)
+        self.scrolled_window.set_policy(
+            Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.EXTERNAL
+        )
         self.scrolled_window.set_kinetic_scrolling(True)
 
         self.list_box = Gtk.ListBox()
@@ -62,20 +64,18 @@ class MyWindow(Gtk.Window):
         coros = []
         for num in range(1, 3):
             url = f"https://paycon.su/api{num}.php"
-            request_id = num
-            coros.append(request_to_api(request_id, url))
+            coros.append(request_to_api(num, url))
         responses = await asyncio.gather(*coros)
         result_data = []
         for request_id, response_data in sorted(responses):
             result_data.extend(response_data)
         columns = ["name", "price"]
-        rows = [[str(item[column]) for column in columns] for item in result_data]
+        rows = [[str(item.get(column)) for column in columns] for item in result_data]
         self.update_list_box(data=rows, dialog=dialog)
-
 
     async def do_file_loading(self, dialog):
         print("Loading from file")
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.5)  # Имитация долгой загрузки
         with open("base.csv", newline="", encoding="utf-8") as file:
             rows = csv.reader(file)
             rows = list(rows)
@@ -91,7 +91,6 @@ class MyWindow(Gtk.Window):
         self.button2.set_visible(False)
         self.box.pack_start(self.scrolled_window, True, True, 0)
         self.scrolled_window.show_all()
-
 
     def show_loading_spinner(self, message):
         dialog = Gtk.Dialog(
