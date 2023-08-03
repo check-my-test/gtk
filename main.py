@@ -1,6 +1,9 @@
 import csv
+from functools import reduce
 
 import gi
+import httpx
+
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib, Gdk
 
@@ -10,24 +13,17 @@ import gbulb.gtk
 gbulb.install(gtk=True)
 
 
-class CustomListBox(Gtk.ListBox):
-    def __init__(self):
-        super().__init__()
-        self.connect("scroll-event", self.on_scroll_event)
-
-    def on_scroll_event(self, widget, event):
-        # Handle scrolling with the mouse wheel
-        if event.direction == Gdk.ScrollDirection.UP:
-            self.get_adjustment().step_increment(-1)
-        elif event.direction == Gdk.ScrollDirection.DOWN:
-            self.get_adjustment().step_increment(1)
-
-
 class ListBoxRowWithData(Gtk.ListBoxRow):
     def __init__(self, data):
         super().__init__()
-        self.data = " | ".join(data)
-        self.add(Gtk.Label(label=data, xalign=0.0))
+        self.data = " ".join(data)
+        self.add(Gtk.Label(label=self.data))
+
+
+async def request_to_api(request_id, url):
+    async with httpx.AsyncClient() as client:
+        data = await client.get(url)
+        return request_id, data.json()
 
 
 class MyWindow(Gtk.Window):
@@ -49,11 +45,9 @@ class MyWindow(Gtk.Window):
         self.scrolled_window.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.EXTERNAL)
         self.scrolled_window.set_kinetic_scrolling(True)
 
-        self.list_box = CustomListBox()
+        self.list_box = Gtk.ListBox()
         self.list_box.set_selection_mode(Gtk.SelectionMode.NONE)
         self.scrolled_window.add(self.list_box)
-
-
 
     def on_button1_clicked(self, widget):
         dialog = self.show_loading_spinner("Loading from API")
@@ -65,9 +59,18 @@ class MyWindow(Gtk.Window):
 
     async def do_api_loading(self, dialog):
         print("Loading from API")
-        await asyncio.sleep(1)
-        data = [("Product 1", 10.99), ("Product 2", 25.50), ("Product 3", 5.75)]
-        self.update_list_box(data, dialog)
+        coros = []
+        for num in range(1, 3):
+            url = f"https://paycon.su/api{num}.php"
+            request_id = num
+            coros.append(request_to_api(request_id, url))
+        responses = await asyncio.gather(*coros)
+        result_data = []
+        for request_id, response_data in sorted(responses):
+            result_data.extend(response_data)
+        columns = ["name", "price"]
+        rows = [[str(item[column]) for column in columns] for item in result_data]
+        self.update_list_box(data=rows, dialog=dialog)
 
 
     async def do_file_loading(self, dialog):
@@ -76,20 +79,18 @@ class MyWindow(Gtk.Window):
         with open("base.csv", newline="", encoding="utf-8") as file:
             rows = csv.reader(file)
             rows = list(rows)
-        self.update_list_box(rows, dialog)
+        rows = [row[1:3] for row in rows]
+        self.update_list_box(data=rows, dialog=dialog)
         print("updated")
 
-
-
-    def update_list_box(self, rows, dialog):
-        for row in rows:
-            self.list_box.add(ListBoxRowWithData(row[1:]))
+    def update_list_box(self, data, dialog):
+        for row in data:
+            self.list_box.add(ListBoxRowWithData(row))
         dialog.destroy()
         self.button1.set_visible(False)
         self.button2.set_visible(False)
         self.box.pack_start(self.scrolled_window, True, True, 0)
         self.scrolled_window.show_all()
-
 
 
     def show_loading_spinner(self, message):
