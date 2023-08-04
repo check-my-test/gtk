@@ -78,7 +78,7 @@ class MyWindow(Gtk.Window):
         await asyncio.sleep(0.5)  # Имитация долгой загрузки
         with open("base.csv", newline="", encoding="utf-8") as file:
             rows = csv.reader(file)
-            rows = list(rows)
+            rows = list(rows)[1:]
         rows = [row[1:3] for row in rows]
         self.update_list_box(data=rows, dialog=dialog)
         print("updated")
